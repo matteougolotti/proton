@@ -11,7 +11,6 @@ use rand::Rng;
 
 use crate::utils::{checksum};
 
-
 pub const PROTOCOL_SERVICES: u64 = 9;
 pub const PROTOCOL_VERSION: i32 = 70001;
 pub const USER_AGENT: &str = "/Muon:0.0.1/";
