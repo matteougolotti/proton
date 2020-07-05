@@ -1,2 +1,3 @@
 # muon
-A minimal Bitcoin client
+
+A very simple and unstable Bitcoin client
