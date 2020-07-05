@@ -28,10 +28,7 @@ pub trait Packet {
 }
 
 pub trait Serializable {
-    // We'll have to parse messages like this instead of building them and parsing after
     fn parse(stream: &mut dyn Read, opt: &Options) -> Box<Self>;
-
-    // fn parse(&self, stream: &dyn Read, opt: &Options);
 
     fn to_wire(&self, stream: &mut dyn Write, opt: &Options);
 }
@@ -73,9 +70,6 @@ impl Message {
 }
 
 impl Serializable for Message {
-    // fn parse(&self, _stream: &dyn Read, _opt: &Options) {
-    // }
-
     fn parse(stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
         let magic: u32 = stream.read_u32::<LittleEndian>().unwrap();
         
