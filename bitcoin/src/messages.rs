@@ -1,6 +1,5 @@
 // Docs
-// https://en.bitcoin.it/wiki/Protocol_documentation#version
-// https://github.com/cdecker/pycoin/blob/master/bitcoin/messages.py
+// https://en.bitcoin.it/wiki/Protocol_documentation
 
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
