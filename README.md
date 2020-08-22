@@ -1,21 +1,16 @@
-# muon
+# Proton
 
-A very simple and unstable Bitcoin client
+An experimental implementation of the Bitcoin protocol.
 
-## Build
+Build
 
 ```bash
 cargo build
 ```
 
-## Test
+Test
 
 ```bash
 cargo test
 ```
 
-## Run
-
-```bash
-cargo run
-```

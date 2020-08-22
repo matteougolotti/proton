@@ -1,5 +1,5 @@
 [package]
-name = "muon"
+name = "proton"
 version = "0.1.0"
 authors = ["Matteo Ugolotti <matteo.ugolotti@gmail.com>"]
 edition = "2018"
