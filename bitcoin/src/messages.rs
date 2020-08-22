@@ -124,6 +124,15 @@ impl VarInt {
             VarInt::U64(n as u64)
         }
     }
+
+    pub fn as_usize(&self) -> usize {
+        match self {
+            VarInt::U8(n) => *n as usize,
+            VarInt::U16(n) => *n as usize,
+            VarInt::U32(n) => *n as usize,
+            VarInt::U64(n) => *n as usize,
+        }
+    }
 }
 
 impl Serializable for VarInt {
@@ -173,32 +182,14 @@ impl VarString {
 impl Serializable for VarString {
     fn parse(stream: &mut dyn Read, opt: &Options) -> Box<Self> {
         let length: VarInt = *VarInt::parse(stream, opt);
-        let string: String = match length {
-            VarInt::U8(n) => {
-                let mut buf: Vec<u8> = vec![0; n as usize];
-                stream.read(&mut buf).unwrap();
-                String::from_utf8(buf).unwrap()
-            },
-            VarInt::U16(n) => {
-                let mut buf: Vec<u8> = vec![0; n as usize];
-                stream.read(&mut buf).unwrap();
-                String::from_utf8(buf).unwrap()
-            },
-            VarInt::U32(n) => {
-                let mut buf: Vec<u8> = vec![0; n as usize];
-                stream.read(&mut buf).unwrap();
-                String::from_utf8(buf).unwrap()
-            },
-            VarInt::U64(n) => {
-                let mut buf: Vec<u8> = vec![0; n as usize];
-                stream.read(&mut buf).unwrap();
-                String::from_utf8(buf).unwrap()
-            },
-        };
+        let n: usize = length.as_usize();
+        let mut buf: Vec<u8> = vec![0; n];
+        stream.read(&mut buf).unwrap();
+        let string = String::from_utf8(buf).unwrap();
 
         Box::new(
             Self {
-                length: *VarInt::parse(stream, opt),
+                length: length,
                 string: string,
             }
         )
