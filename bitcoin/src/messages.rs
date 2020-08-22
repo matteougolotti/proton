@@ -132,18 +132,28 @@ impl Serializable for VarInt {
             0xFF => Box::new(VarInt::U64(stream.read_u64::<LittleEndian>().unwrap())),
             0xFE => Box::new(VarInt::U32(stream.read_u32::<LittleEndian>().unwrap())),
             0xFD => Box::new(VarInt::U16(stream.read_u16::<LittleEndian>().unwrap())),
-            _ => Box::new(VarInt::U8(stream.read_u8().unwrap())),
+            value => Box::new(VarInt::U8(value)),
         }
     }
 
     fn to_wire(&self, stream: &mut dyn Write, _opt: &Options) {
         match self {
             VarInt::U8(n) => stream.write_u8(*n).unwrap(),
-            VarInt::U16(n) => stream.write_u16::<LittleEndian>(*n).unwrap(),
-            VarInt::U32(n) => stream.write_u32::<LittleEndian>(*n).unwrap(),
-            VarInt::U64(n) => stream.write_u64::<LittleEndian>(*n).unwrap(),
+            VarInt::U16(n) => {
+                stream.write_u8(0xFD).unwrap();
+                stream.write_u16::<LittleEndian>(*n).unwrap();
+            },
+            VarInt::U32(n) => {
+                stream.write_u8(0xFE).unwrap();
+                stream.write_u32::<LittleEndian>(*n).unwrap();
+            },
+            VarInt::U64(n) => {
+                stream.write_u8(0xFF).unwrap();
+                stream.write_u64::<LittleEndian>(*n).unwrap();
+            },
         }
     }
+
 }
 
 pub struct VarString {
