@@ -70,7 +70,7 @@ impl Message {
 impl Serializable for Message {
     fn parse(stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
         let magic: u32 = stream.read_u32::<LittleEndian>().unwrap();
-        
+
         let mut padded_command: [u8; 12] = [0; 12];
         stream.read(&mut padded_command).unwrap();
         let _command: Vec<u8> = padded_command
@@ -78,7 +78,7 @@ impl Serializable for Message {
             .take_while(|&&x| x != 0)
             .cloned()
             .collect();
-        
+
         let length: u32 = stream.read_u32::<LittleEndian>().unwrap();
         let checksum: u32 = stream.read_u32::<LittleEndian>().unwrap();
 
@@ -226,7 +226,7 @@ impl Serializable for Address {
         };
 
         let services = stream.read_u64::<LittleEndian>().unwrap();
-        
+
         let mut encoded_ip: [u8; 16] = [0; 16];
         stream.read(&mut encoded_ip).unwrap();
 
