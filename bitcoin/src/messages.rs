@@ -387,3 +387,106 @@ impl Packet for Verack {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_varint_u8() {
+        let expected: u8 = 12;
+        let n: VarInt = VarInt::U8(expected);
+        let opt: Options = Options{
+            version: super::PROTOCOL_VERSION,
+            is_version_message: true,
+        };
+
+        let mut buf: Vec<u8> = Vec::new();
+        n.to_wire(&mut buf, &opt);
+
+        let mut buf = buf.as_slice();
+        let n: Box<VarInt> = VarInt::parse(&mut buf, &opt);
+
+        match *n {
+            VarInt::U8(number) => assert_eq!(expected, number),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn test_varint_u16() {
+        let expected: u16 = 0xFFFA;
+        let n: VarInt = VarInt::U16(expected);
+        let opt: Options = Options{
+            version: super::PROTOCOL_VERSION,
+            is_version_message: true,
+        };
+
+        let mut buf: Vec<u8> = Vec::new();
+        n.to_wire(&mut buf, &opt);
+
+        let mut buf = buf.as_slice();
+        let n: Box<VarInt> = VarInt::parse(&mut buf, &opt);
+
+        match *n {
+            VarInt::U16(number) => assert_eq!(expected, number),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn test_varint_u32() {
+        let expected: u32 = 0xFFFA;
+        let n: VarInt = VarInt::U32(expected);
+        let opt: Options = Options{
+            version: super::PROTOCOL_VERSION,
+            is_version_message: true,
+        };
+
+        let mut buf: Vec<u8> = Vec::new();
+        n.to_wire(&mut buf, &opt);
+
+        let mut buf = buf.as_slice();
+        let n: Box<VarInt> = VarInt::parse(&mut buf, &opt);
+
+        match *n {
+            VarInt::U32(number) => assert_eq!(expected, number),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn test_varint_u64() {
+        let expected: u64 = 0xFFFFFA;
+        let n: VarInt = VarInt::U64(expected);
+        let opt: Options = Options{
+            version: super::PROTOCOL_VERSION,
+            is_version_message: true,
+        };
+
+        let mut buf: Vec<u8> = Vec::new();
+        n.to_wire(&mut buf, &opt);
+
+        let mut buf = buf.as_slice();
+        let n: Box<VarInt> = VarInt::parse(&mut buf, &opt);
+
+        match *n {
+            VarInt::U64(number) => assert_eq!(expected, number),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn test_varstring() {
+        let expected: String = String::from("Test");
+        let s: VarString = VarString::new(&expected);
+        let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: true};
+
+        let mut buf: Vec<u8> = Vec::new();
+        s.to_wire(&mut buf, &opt);
+
+        let mut buf = buf.as_slice();
+        let s: Box<VarString> = VarString::parse(&mut buf, &opt);
+
+        assert_eq!(expected, s.string);
+    }
+}
