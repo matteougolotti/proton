@@ -245,12 +245,12 @@ impl Serializable for Address {
             ipv6 => IpAddr::V6(Ipv6Addr::new(
                 u16::from_be_bytes([ipv6[0], ipv6[1]]),
                 u16::from_be_bytes([ipv6[2], ipv6[3]]),
-                u16::from_be_bytes([ipv6[0], ipv6[1]]),
-                u16::from_be_bytes([ipv6[0], ipv6[1]]),
-                u16::from_be_bytes([ipv6[0], ipv6[1]]),
-                u16::from_be_bytes([ipv6[0], ipv6[1]]),
-                u16::from_be_bytes([ipv6[0], ipv6[1]]),
-                u16::from_be_bytes([ipv6[0], ipv6[1]]),
+                u16::from_be_bytes([ipv6[4], ipv6[5]]),
+                u16::from_be_bytes([ipv6[6], ipv6[7]]),
+                u16::from_be_bytes([ipv6[8], ipv6[9]]),
+                u16::from_be_bytes([ipv6[10], ipv6[11]]),
+                u16::from_be_bytes([ipv6[12], ipv6[13]]),
+                u16::from_be_bytes([ipv6[14], ipv6[15]]),
             )),
         };
 
