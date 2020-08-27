@@ -480,4 +480,41 @@ mod tests {
 
         assert_eq!(expected, s.string);
     }
+
+    #[test]
+    fn test_addressi_ipv4_version_message() {
+        let expected_ip: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        let expected_address: Address = Address::new(expected_ip);
+        let expected_timestamp: u32 = 0;
+        let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: true};
+
+        let mut buf: Vec<u8> = Vec::new();
+        expected_address.to_wire(&mut buf, & opt);
+
+        let mut buf = buf.as_slice();
+        let address: Box<Address> = Address::parse(&mut buf, &opt);
+
+        assert_eq!(expected_ip, address.ip, "IP addresses");
+        assert_eq!(expected_address.port, address.port, "Port");
+        assert_eq!(expected_address.services, address.services, "Services");
+        assert_eq!(expected_timestamp, address.timestamp, "Timestamp");
+    }
+
+    #[test]
+    fn test_addressi_ipv4() {
+        let expected_ip: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        let expected_address: Address = Address::new(expected_ip);
+        let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: false};
+
+        let mut buf: Vec<u8> = Vec::new();
+        expected_address.to_wire(&mut buf, & opt);
+
+        let mut buf = buf.as_slice();
+        let address: Box<Address> = Address::parse(&mut buf, &opt);
+
+        assert_eq!(expected_ip, address.ip, "IP addresses");
+        assert_eq!(expected_address.port, address.port, "Port");
+        assert_eq!(expected_address.services, address.services, "Services");
+        assert_eq!(expected_address.timestamp, address.timestamp, "Timestamp");
+    }
 }
