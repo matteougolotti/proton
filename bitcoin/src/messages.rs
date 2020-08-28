@@ -12,7 +12,7 @@ use crate::utils::{checksum};
 
 pub const PROTOCOL_SERVICES: u64 = 9;
 pub const PROTOCOL_VERSION: i32 = 70001;
-pub const USER_AGENT: &str = "/Muon:0.0.1/";
+pub const USER_AGENT: &str = "/Proton:0.0.1/";
 pub const NODE_WITNESS: u64 = 1 << 3;
 
 #[repr(u32)]
