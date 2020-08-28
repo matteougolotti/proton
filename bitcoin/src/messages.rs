@@ -278,14 +278,14 @@ impl Serializable for Address {
 }
 
 pub struct Version {
-    pub timestamp: i64,
-    pub services: u64,
     pub version: i32,
+    pub services: u64,
+    pub timestamp: i64,
+    pub addr_recv: Address,
+    pub addr_from: Address,
     pub nonce: u64,
     pub user_agent: String,
     pub start_height: i32,
-    pub addr_from: Address,
-    pub addr_recv: Address,
     pub relay: Option<bool>,
 }
 
@@ -294,15 +294,15 @@ impl Version {
         let mut rng = rand::thread_rng();
 
         Self {
-            timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as i64,
-            services: services,
             version: PROTOCOL_VERSION,
+            services: services,
+            timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as i64,
+            addr_recv: addr_recv,
+            addr_from: addr_from,
             nonce: rng.gen(),
             user_agent: String::from(USER_AGENT),
             start_height: 0,
             relay: Some(true),
-            addr_from: addr_from,
-            addr_recv: addr_recv,
         }
     }
 
@@ -516,5 +516,31 @@ mod tests {
         assert_eq!(expected_address.port, address.port, "Port");
         assert_eq!(expected_address.services, address.services, "Services");
         assert_eq!(expected_address.timestamp, address.timestamp, "Timestamp");
+    }
+
+    #[test]
+    fn test_version_packet() {
+        let expected: Version = Version::new(
+            Address::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2))),
+            Address::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 3))),
+            super::PROTOCOL_SERVICES,
+        );
+        let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: true};
+
+        let mut buf: Vec<u8> = Vec::new();
+        expected.to_wire(&mut buf, &opt);
+
+        let mut buf = buf.as_slice();
+        let version: Box<Version> = Version::parse(&mut buf, &opt);
+
+        assert_eq!(expected.command(), version.command());
+        assert_eq!(expected.version, version.version);
+        assert_eq!(expected.services, version.services);
+        assert_eq!(expected.timestamp, version.timestamp);
+        assert_eq!(expected.nonce, version.nonce);
+        assert_eq!(expected.addr_recv.ip, version.addr_recv.ip);
+        assert_eq!(expected.addr_from.ip, version.addr_from.ip);
+        assert_eq!(expected.user_agent, version.user_agent);
+        assert_eq!(expected.start_height, version.start_height);
     }
 }
