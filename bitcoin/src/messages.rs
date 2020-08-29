@@ -378,6 +378,16 @@ impl Packet for Verack {
     }
 }
 
+
+impl Serializable for Verack {
+    fn parse(_stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
+        Box::new(Self{})
+    }
+
+    fn to_wire(&self, _stream: &mut dyn Write, _opt: &Options) {
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -553,6 +563,25 @@ mod tests {
         );
         let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: true};
         let expected: Message = Message::new(Network::TESTNET, &version, &opt);
+
+        let mut buf: Vec<u8> = Vec::new();
+        expected.to_wire(&mut buf, &opt);
+
+        let mut buf = buf.as_slice();
+        let msg: Box<Message> = Message::parse(&mut buf, &opt);
+
+        assert_eq!(expected.command, msg.command);
+        assert_eq!(expected.length, msg.length);
+        assert_eq!(expected.magic, msg.magic);
+        assert_eq!(expected.checksum, msg.checksum);
+        assert_eq!(expected.payload, msg.payload);
+    }
+
+    #[test]
+    fn test_verack_message() {
+        let verack: Verack = Verack{};
+        let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: false};
+        let expected: Message = Message::new(Network::MAINNET, &verack, &opt);
 
         let mut buf: Vec<u8> = Vec::new();
         expected.to_wire(&mut buf, &opt);
