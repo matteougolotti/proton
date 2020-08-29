@@ -82,7 +82,7 @@ impl Serializable for Message {
         let length: u32 = stream.read_u32::<LittleEndian>().unwrap();
         let checksum: u32 = stream.read_u32::<LittleEndian>().unwrap();
 
-        let mut payload: Vec<u8> = Vec::new();
+        let mut payload: Vec<u8> = vec![0; length as usize];
         stream.read(&mut payload).unwrap();
 
         Box::new(
@@ -542,5 +542,28 @@ mod tests {
         assert_eq!(expected.addr_from.ip, version.addr_from.ip);
         assert_eq!(expected.user_agent, version.user_agent);
         assert_eq!(expected.start_height, version.start_height);
+    }
+
+    #[test]
+    fn test_version_message() {
+        let version: Version = Version::new(
+            Address::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2))),
+            Address::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 3))),
+            super::PROTOCOL_SERVICES,
+        );
+        let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: true};
+        let expected: Message = Message::new(Network::TESTNET, &version, &opt);
+
+        let mut buf: Vec<u8> = Vec::new();
+        expected.to_wire(&mut buf, &opt);
+
+        let mut buf = buf.as_slice();
+        let msg: Box<Message> = Message::parse(&mut buf, &opt);
+
+        assert_eq!(expected.command, msg.command);
+        assert_eq!(expected.length, msg.length);
+        assert_eq!(expected.magic, msg.magic);
+        assert_eq!(expected.checksum, msg.checksum);
+        assert_eq!(expected.payload, msg.payload);
     }
 }
