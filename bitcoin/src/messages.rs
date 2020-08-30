@@ -202,19 +202,19 @@ impl Serializable for VarString {
 }
 
 pub struct Address {
+    pub timestamp: u32,
+    pub services: u64,
     pub ip: IpAddr,
     pub port: u16,
-    pub services: u64,
-    pub timestamp: u32,
 }
 
 impl Address {
     pub fn new(ip: IpAddr) -> Address {
         Self {
+            timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as u32,
+            services: PROTOCOL_SERVICES,
             ip: ip,
             port: 8333,
-            services: PROTOCOL_SERVICES,
-            timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as u32,
         }
     }
 }
@@ -387,6 +387,45 @@ impl Serializable for Verack {
     fn to_wire(&self, _stream: &mut dyn Write, _opt: &Options) {
     }
 }
+
+pub struct Addr {
+    pub count: VarInt,
+    pub addr_list: Vec<Address>,
+}
+
+impl Packet for Addr {
+    fn command(&self) -> String {
+        String::from("addr")
+    }
+}
+
+impl Serializable for Addr {
+    fn parse(stream: &mut dyn Read, opt: &Options) -> Box<Self> {
+        let count: VarInt = *VarInt::parse(stream, &opt);
+        let mut addr_list: Vec<Address> = Vec::new();
+
+        for _ in 0..count.as_usize() {
+            let addr: Address = *Address::parse(stream, &opt);
+            addr_list.push(addr);
+        }
+
+        Box::new(
+            Self{
+                count: count,
+                addr_list: addr_list,
+            }
+        )
+    }
+
+    fn to_wire(&self, stream: &mut dyn Write, opt: &Options) {
+        self.count.to_wire(stream, opt);
+        for addr in self.addr_list.iter() {
+            addr.to_wire(stream, opt);
+        }
+    }
+}
+
+// TODO implement getaddr message
 
 #[cfg(test)]
 mod tests {
@@ -594,5 +633,25 @@ mod tests {
         assert_eq!(expected.magic, msg.magic);
         assert_eq!(expected.checksum, msg.checksum);
         assert_eq!(expected.payload, msg.payload);
+    }
+
+    #[test]
+    fn test_addr_message() {
+        let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: false};
+        let mut addr_list: Vec<Address> = Vec::new();
+        let address: Address = Address::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)));
+        addr_list.push(address);
+        let count: VarInt = VarInt::U8(1);
+        let expected: Addr = Addr{count: count, addr_list: addr_list};
+
+        let mut buf: Vec<u8> = Vec::new();
+        expected.to_wire(&mut buf, &opt);
+
+        let mut buf = buf.as_slice();
+        let addr: Box<Addr> = Addr::parse(&mut buf, &opt);
+
+        assert_eq!(expected.count.as_usize(), addr.count.as_usize());
+        assert_eq!(expected.addr_list[0].ip, addr.addr_list[0].ip);
+        assert_eq!(expected.addr_list[0].port, addr.addr_list[0].port);
     }
 }
