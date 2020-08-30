@@ -425,7 +425,14 @@ impl Serializable for Addr {
     }
 }
 
-// TODO implement getaddr message
+pub struct Getaddr {
+}
+
+impl Packet for Getaddr {
+    fn command(&self) -> String {
+        String::from("getaddr")
+    }
+}
 
 #[cfg(test)]
 mod tests {
