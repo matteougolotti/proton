@@ -7,6 +7,7 @@ use std::time::SystemTime;
 
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use rand::Rng;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::utils::{checksum};
 
@@ -15,6 +16,7 @@ pub const PROTOCOL_VERSION: i32 = 70001;
 pub const USER_AGENT: &str = "/Proton:0.0.1/";
 pub const NODE_WITNESS: u64 = 1 << 3;
 
+#[derive(Clone, Copy)]
 #[repr(u32)]
 pub enum Network {
     MAINNET = 0xD9B4BEF9,
@@ -45,24 +47,24 @@ pub struct Message {
 }
 
 impl Message {
-    pub fn new<T: Packet + Serializable>(magic: Network, payload_msg: &T, opt: &Options) -> Message {
+    pub fn new<T: Packet + Serializable>(magic: Network, payload: &T, opt: &Options) -> Message {
         let mut cmd: [u8; 12] = Default::default();
 
-        let command: String = payload_msg.command();
+        let command: String = payload.command();
         let padding: Vec<u8> = vec![0; 12 - command.len()];
         cmd.copy_from_slice(
             [command.as_bytes(), padding.as_slice()].concat().as_slice()
         );
 
-        let mut payload: Vec<u8> = Vec::new();
-        payload_msg.to_wire(&mut payload, opt);
+        let mut buf: Vec<u8> = Vec::new();
+        payload.to_wire(&mut buf, opt);
 
         Self {
             magic: magic as u32,
             command: cmd,
-            length: payload.len() as u32,
-            checksum: checksum(&payload),
-            payload: payload,
+            length: buf.len() as u32,
+            checksum: checksum(&buf),
+            payload: buf,
         }
     }
 }
@@ -434,9 +436,27 @@ impl Packet for Getaddr {
     }
 }
 
+impl Serializable for Getaddr {
+    fn parse(_stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
+        Box::new(Self{})
+    }
+
+    fn to_wire(&self, _stream: &mut dyn Write, _opt: &Options) {
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::net::TcpStream;
+
+    #[tokio::test]
+    async fn my_async_test() {
+        // let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: false};
+        // let stream: tokio::net::TcpStream = TcpStream::connect("").await.unwrap();
+        // let n: Box<VarInt> = VarInt::parse(&mut stream, &opt);
+        assert!(true);
+    }
 
     #[test]
     fn test_varint_u8() {
