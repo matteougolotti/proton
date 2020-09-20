@@ -7,7 +7,6 @@ use std::time::SystemTime;
 
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use rand::Rng;
-use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::utils::{checksum};
 
@@ -23,7 +22,7 @@ pub enum Network {
     TESTNET = 0xDAB5BFFA,
 }
 
-pub trait Packet {
+pub trait Command {
     fn command(&self) -> String;
 }
 
@@ -38,72 +37,77 @@ pub struct Options {
     pub is_version_message: bool,
 }
 
-pub struct Message {
-    pub magic: u32,
-    pub command: [u8; 12],
-    pub length: u32,
-    pub checksum: u32,
-    pub payload: Vec<u8>,
+pub enum Message {
+    Version(Version),
+    Verack(Verack),
 }
 
-impl Message {
-    pub fn new<T: Packet + Serializable>(magic: Network, payload: &T, opt: &Options) -> Message {
-        let mut cmd: [u8; 12] = Default::default();
+pub fn write<T: Command + Serializable>(message: &T, stream: &mut dyn Write, magic: Network, opt: &Options) {
+    let mut command: [u8; 12] = Default::default();
 
-        let command: String = payload.command();
-        let padding: Vec<u8> = vec![0; 12 - command.len()];
-        cmd.copy_from_slice(
-            [command.as_bytes(), padding.as_slice()].concat().as_slice()
-        );
+    let cmd: String = message.command();
+    let padding: Vec<u8> = vec![0; 12 - cmd.len()];
+    command.copy_from_slice(
+        [cmd.as_bytes(), padding.as_slice()].concat().as_slice()
+    );
 
-        let mut buf: Vec<u8> = Vec::new();
-        payload.to_wire(&mut buf, opt);
+    let mut payload: Vec<u8> = Vec::new();
+    message.to_wire(&mut payload, opt);
 
-        Self {
-            magic: magic as u32,
-            command: cmd,
-            length: buf.len() as u32,
-            checksum: checksum(&buf),
-            payload: buf,
-        }
-    }
+    let length: u32 = payload.len() as u32;
+    let checksum = checksum(&payload);
+
+    stream.write_u32::<LittleEndian>(magic as u32).unwrap();
+    stream.write_all(&command).unwrap();
+    stream.write_u32::<LittleEndian>(length).unwrap();
+    stream.write_u32::<LittleEndian>(checksum).unwrap();
+    stream.write_all(&payload).unwrap();
 }
 
-impl Serializable for Message {
-    fn parse(stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
-        let magic: u32 = stream.read_u32::<LittleEndian>().unwrap();
+pub fn read(data: &mut [u8], opt: &Options) -> Result<(Box<Message>, usize), ()> {
+    static FIXED_HEADER_SIZE: usize = 24;
+    let data_len: u32 = data.len() as u32;
+    let mut stream = std::io::Cursor::new(data);
 
-        let mut padded_command: [u8; 12] = [0; 12];
-        stream.read(&mut padded_command).unwrap();
-        let _command: Vec<u8> = padded_command
-            .iter()
-            .take_while(|&&x| x != 0)
-            .cloned()
-            .collect();
+    let _magic: u32 = stream.read_u32::<LittleEndian>().unwrap();
 
-        let length: u32 = stream.read_u32::<LittleEndian>().unwrap();
-        let checksum: u32 = stream.read_u32::<LittleEndian>().unwrap();
+    let mut padded_command: [u8; 12] = [0; 12];
+    stream.read(&mut padded_command).unwrap();
+    let command: Vec<u8> = padded_command
+        .iter()
+        .take_while(|&&x| x != 0)
+        .cloned()
+        .collect();
 
-        let mut payload: Vec<u8> = vec![0; length as usize];
-        stream.read(&mut payload).unwrap();
+    let length: u32 = stream.read_u32::<LittleEndian>().unwrap();
+    let _checksum: u32 = stream.read_u32::<LittleEndian>().unwrap();
 
-        Box::new(
-            Self {
-                magic: magic,
-                command: padded_command,
-                length: length,
-                checksum: checksum,
-                payload: payload,
+    let mut payload: Vec<u8> = vec![0; length as usize];
+    stream.read(&mut payload).unwrap();
+
+    // TODO verify checksum
+
+    match data_len >= length {
+        true => {
+            match std::str::from_utf8(&command).unwrap() {
+                "version" => Ok((
+                        Box::new(Message::Version(*Version::parse(
+                            &mut payload.as_slice(),
+                            &Options{version: opt.version, is_version_message: true}
+                        ))),
+                        FIXED_HEADER_SIZE + length as usize
+                )),
+                "verack" => Ok((
+                        Box::new(Message::Verack(*Verack::parse(&mut payload.as_slice(), opt))),
+                        FIXED_HEADER_SIZE + length as usize
+                )),
+                command => {
+                    println!("Unable to process command => {}", command);
+                    Err(())
+                }
             }
-        )
-    }
-
-    fn to_wire(&self, stream: &mut dyn Write, _opt: &Options) {
-        stream.write_u32::<LittleEndian>(self.magic).unwrap();
-        stream.write(&self.command).unwrap();
-        stream.write_u32::<LittleEndian>(self.length).unwrap();
-        stream.write_u32::<LittleEndian>(self.checksum).unwrap();
-        stream.write(&self.payload).unwrap();
+        },
+        false => Err(())
     }
 }
 
@@ -164,7 +168,6 @@ impl Serializable for VarInt {
             },
         }
     }
-
 }
 
 pub struct VarString {
@@ -313,7 +316,7 @@ impl Version {
     }
 }
 
-impl Packet for Version {
+impl Command for Version {
     fn command(&self) -> String {
         String::from("version")
     }
@@ -374,7 +377,7 @@ impl Serializable for Version {
 pub struct Verack {
 }
 
-impl Packet for Verack {
+impl Command for Verack {
     fn command(&self) -> String {
         String::from("verack")
     }
@@ -395,7 +398,7 @@ pub struct Addr {
     pub addr_list: Vec<Address>,
 }
 
-impl Packet for Addr {
+impl Command for Addr {
     fn command(&self) -> String {
         String::from("addr")
     }
@@ -430,7 +433,7 @@ impl Serializable for Addr {
 pub struct Getaddr {
 }
 
-impl Packet for Getaddr {
+impl Command for Getaddr {
     fn command(&self) -> String {
         String::from("getaddr")
     }
@@ -448,15 +451,6 @@ impl Serializable for Getaddr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::net::TcpStream;
-
-    #[tokio::test]
-    async fn my_async_test() {
-        // let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: false};
-        // let stream: tokio::net::TcpStream = TcpStream::connect("").await.unwrap();
-        // let n: Box<VarInt> = VarInt::parse(&mut stream, &opt);
-        assert!(true);
-    }
 
     #[test]
     fn test_varint_u8() {
@@ -558,7 +552,7 @@ mod tests {
     }
 
     #[test]
-    fn test_addressi_ipv4_version_message() {
+    fn test_address_ipv4_version_message() {
         let expected_ip: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let expected_address: Address = Address::new(expected_ip);
         let expected_timestamp: u32 = 0;
@@ -577,7 +571,7 @@ mod tests {
     }
 
     #[test]
-    fn test_addressi_ipv4() {
+    fn test_address_ipv4() {
         let expected_ip: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let expected_address: Address = Address::new(expected_ip);
         let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: false};
@@ -595,7 +589,7 @@ mod tests {
     }
 
     #[test]
-    fn test_version_packet() {
+    fn test_version() {
         let expected: Version = Version::new(
             Address::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2))),
             Address::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 3))),
@@ -621,45 +615,34 @@ mod tests {
     }
 
     #[test]
-    fn test_version_message() {
-        let version: Version = Version::new(
+    fn test_version_write_read() {
+        let expected: Version = Version::new(
             Address::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2))),
             Address::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 3))),
             super::PROTOCOL_SERVICES,
         );
         let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: true};
-        let expected: Message = Message::new(Network::TESTNET, &version, &opt);
 
-        let mut buf: Vec<u8> = Vec::new();
-        expected.to_wire(&mut buf, &opt);
+        let mut buffer: Vec<u8> = Vec::new();
+        write(&expected, &mut buffer, Network::TESTNET, &opt);
 
-        let mut buf = buf.as_slice();
-        let msg: Box<Message> = Message::parse(&mut buf, &opt);
+        let actual: Version = match read(&mut buffer, &opt) {
+            Ok((message, _n)) => match *message {
+                Message::Version(version) => version,
+                _ => panic!(),
+            },
+            Err(_) => panic!()
+        };
 
-        assert_eq!(expected.command, msg.command);
-        assert_eq!(expected.length, msg.length);
-        assert_eq!(expected.magic, msg.magic);
-        assert_eq!(expected.checksum, msg.checksum);
-        assert_eq!(expected.payload, msg.payload);
-    }
-
-    #[test]
-    fn test_verack_message() {
-        let verack: Verack = Verack{};
-        let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: false};
-        let expected: Message = Message::new(Network::MAINNET, &verack, &opt);
-
-        let mut buf: Vec<u8> = Vec::new();
-        expected.to_wire(&mut buf, &opt);
-
-        let mut buf = buf.as_slice();
-        let msg: Box<Message> = Message::parse(&mut buf, &opt);
-
-        assert_eq!(expected.command, msg.command);
-        assert_eq!(expected.length, msg.length);
-        assert_eq!(expected.magic, msg.magic);
-        assert_eq!(expected.checksum, msg.checksum);
-        assert_eq!(expected.payload, msg.payload);
+        assert_eq!(expected.version, actual.version);
+        assert_eq!(expected.command(), actual.command());
+        assert_eq!(expected.services, actual.services);
+        assert_eq!(expected.timestamp, actual.timestamp);
+        assert_eq!(expected.nonce, actual.nonce);
+        assert_eq!(expected.addr_recv.ip, actual.addr_recv.ip);
+        assert_eq!(expected.addr_from.ip, actual.addr_from.ip);
+        assert_eq!(expected.user_agent, actual.user_agent);
+        assert_eq!(expected.start_height, actual.start_height);
     }
 
     #[test]
