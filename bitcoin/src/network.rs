@@ -8,6 +8,7 @@ use super::messages::{
     Message,
     Network,
     Options,
+    Pong,
     Serializable,
     Verack,
     Version,
@@ -50,10 +51,10 @@ impl Connection {
 
         while !(*self.stop.read().unwrap()) {
             match stream.read(&mut read_buff) {
-                Ok(n) if n > 0 => {
-                    println!("Read {} bytes", n);
+                Ok(bytes_read) if bytes_read > 0 || parse_buff.len() > 0 => {
+                    println!("Read {} bytes", bytes_read);
                     println!("Read buff => {:x?}", read_buff);
-                    parse_buff.extend_from_slice(&mut read_buff[0..n]);
+                    parse_buff.extend_from_slice(&mut read_buff[0..bytes_read]);
                     println!("Extended vector");
                     println!("Parse buff => {:x?}", parse_buff.as_slice());
                     match super::messages::read(&mut parse_buff, &opt) {
@@ -83,12 +84,24 @@ impl Connection {
 
         match message {
             Message::Version(version) => {
-                println!("RECEIVED => Version");
+                println!("RECEIVED => version");
                 self.version.set(std::cmp::min(super::messages::PROTOCOL_VERSION, version.version));
             },
             Message::Verack(_verack) => {
-                println!("RECEIVED => Verack");
+                println!("RECEIVED => verack");
                 self.send(stream, &Verack{}, &opt);
+            },
+            Message::Alert(_alert) => {
+                println!("RECEIVED => alert");
+            },
+            Message::Ping(ping) => {
+                println!("RECEIVED => ping {}", ping.nonce);
+                let pong: Pong = Pong{nonce: ping.nonce};
+                self.send(stream, &pong, &opt);
+                println!("SENT => pong {}", pong.nonce);
+            },
+            Message::Pong(pong) => {
+                println!("RECEIVED => pong {}", pong.nonce);
             }
         }
     }

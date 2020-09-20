@@ -40,6 +40,9 @@ pub struct Options {
 pub enum Message {
     Version(Version),
     Verack(Verack),
+    Ping(Ping),
+    Pong(Pong),
+    Alert(Alert),
 }
 
 pub fn write<T: Command + Serializable>(message: &T, stream: &mut dyn Write, magic: Network, opt: &Options) {
@@ -85,6 +88,8 @@ pub fn read(data: &mut [u8], opt: &Options) -> Result<(Box<Message>, usize), ()>
     let mut payload: Vec<u8> = vec![0; length as usize];
     stream.read(&mut payload).unwrap();
 
+    let size: usize = FIXED_HEADER_SIZE + length as usize;
+
     // TODO verify checksum
 
     match data_len >= length {
@@ -95,12 +100,12 @@ pub fn read(data: &mut [u8], opt: &Options) -> Result<(Box<Message>, usize), ()>
                             &mut payload.as_slice(),
                             &Options{version: opt.version, is_version_message: true}
                         ))),
-                        FIXED_HEADER_SIZE + length as usize
+                        size
                 )),
-                "verack" => Ok((
-                        Box::new(Message::Verack(*Verack::parse(&mut payload.as_slice(), opt))),
-                        FIXED_HEADER_SIZE + length as usize
-                )),
+                "verack" => Ok((Box::new(Message::Verack(*Verack::parse(&mut payload.as_slice(), opt))), size)),
+                "alert" => Ok((Box::new(Message::Alert(*Alert::parse(&mut payload.as_slice(), opt))), size)),
+                "ping" => Ok((Box::new(Message::Ping(*Ping::parse(&mut payload.as_slice(), opt))), size)),
+                "pong" => Ok((Box::new(Message::Pong(*Pong::parse(&mut payload.as_slice(), opt))), size)),
                 command => {
                     println!("Unable to process command => {}", command);
                     Err(())
@@ -383,7 +388,6 @@ impl Command for Verack {
     }
 }
 
-
 impl Serializable for Verack {
     fn parse(_stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
         Box::new(Self{})
@@ -427,6 +431,71 @@ impl Serializable for Addr {
         for addr in self.addr_list.iter() {
             addr.to_wire(stream, opt);
         }
+    }
+}
+
+pub struct Alert {
+    // Alerts have been decommissioned, so we fake parsing it
+}
+
+impl Serializable for Alert {
+    fn parse(_stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
+        Box::new(
+            Self{
+            }
+        )
+    }
+
+    fn to_wire(&self, _stream: &mut dyn Write, _opt: &Options) {
+        panic!("Not implemented");
+    }
+}
+
+pub struct Ping {
+    pub nonce: u64,
+}
+
+impl Serializable for Ping {
+    fn parse(stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
+        Box::new(
+            Self{
+                nonce: stream.read_u64::<LittleEndian>().unwrap(),
+            }
+        )
+    }
+
+    fn to_wire(&self, stream: &mut dyn Write, _opt: &Options) {
+        stream.write_u64::<LittleEndian>(self.nonce).unwrap();
+    }
+}
+
+impl Command for Ping {
+    fn command(&self) -> String {
+        String::from("ping")
+    }
+}
+
+pub struct Pong {
+    pub nonce: u64,
+}
+
+impl Serializable for Pong {
+    fn parse(stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
+        Box::new(
+            Self{
+                nonce: stream.read_u64::<LittleEndian>().unwrap(),
+            }
+        )
+    }
+
+    fn to_wire(&self, stream: &mut dyn Write, _opt: &Options) {
+        stream.write_u64::<LittleEndian>(self.nonce).unwrap();
+    }
+}
+
+impl Command for Pong {
+    fn command(&self) -> String {
+        String::from("pong")
     }
 }
 
