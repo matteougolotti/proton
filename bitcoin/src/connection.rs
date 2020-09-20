@@ -20,10 +20,19 @@ pub struct Connection {
     pub peer: String,
     pub network: Network,
     pub version: Cell<i32>,
-    pub stop: std::sync::RwLock<bool>,
+    stop: std::sync::RwLock<bool>,
 }
 
 impl Connection {
+    pub fn new(peer: String, network: Network, version: i32) -> Self {
+        Self{
+            peer: peer,
+            network: network,
+            version: Cell::new(version),
+            stop: std::sync::RwLock::new(false),
+        }
+    }
+
     pub fn connect(&self) -> std::io::Result<()> {
         self.version.set(super::messages::PROTOCOL_VERSION);
         let mut stream = TcpStream::connect(&self.peer)?;
@@ -33,6 +42,11 @@ impl Connection {
         self.run(&mut stream);
 
         Ok(())
+    }
+
+    pub fn disconnect(&self) {
+        let mut stop = self.stop.write().unwrap();
+        *stop = true;
     }
 
     fn init_connection(&self, stream: &mut TcpStream) {

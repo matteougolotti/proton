@@ -9,19 +9,30 @@ const BOOTSTRAP_DNS_SEEDS: [&str; 5] = [
 ];
 
 pub struct Node {
+    stop: std::sync::RwLock<bool>,
 }
 
 impl Node {
-    pub fn start(&self) -> std::io::Result<()> {
-        let connection: Connection = Connection{
-            peer: String::from(BOOTSTRAP_DNS_SEEDS[0]),
-            network: super::messages::Network::MAINNET,
-            version: std::cell::Cell::new(super::messages::PROTOCOL_VERSION),
+    pub fn new() -> Self {
+        Self{
             stop: std::sync::RwLock::new(false),
-        };
+        }
+    }
+
+    pub fn start(&self) -> std::io::Result<()> {
+        let connection: Connection = Connection::new(
+            String::from(BOOTSTRAP_DNS_SEEDS[0]),
+            super::messages::Network::MAINNET,
+            super::messages::PROTOCOL_VERSION,
+        );
 
         connection.connect().unwrap();
 
         Ok(())
+    }
+
+    pub fn stop(&self) {
+        let mut stop = self.stop.write().unwrap();
+        *stop = true;
     }
 }

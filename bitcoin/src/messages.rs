@@ -219,7 +219,7 @@ pub struct Address {
 }
 
 impl Address {
-    pub fn new(ip: IpAddr) -> Address {
+    pub fn new(ip: IpAddr) -> Self {
         Self {
             timestamp: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as u32,
             services: PROTOCOL_SERVICES,
