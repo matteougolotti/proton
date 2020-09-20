@@ -435,7 +435,7 @@ impl Serializable for Addr {
 }
 
 pub struct Alert {
-    // Alerts have been decommissioned, so we fake parsing it
+    // Alerts have been decommissioned, so we fake parsing
 }
 
 impl Serializable for Alert {

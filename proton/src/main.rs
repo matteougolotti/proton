@@ -1,6 +1,4 @@
-use bitcoin::network::{
-    Connection,
-};
+use bitcoin::connection::Connection;
 
 const BOOTSTRAP_DNS_SEEDS: [&str; 5] = [
     "seed.bitcoinstats.com:8333",
