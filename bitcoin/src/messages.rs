@@ -29,7 +29,7 @@ pub trait Command {
 pub trait Serializable {
     fn parse(stream: &mut dyn Read, opt: &Options) -> Box<Self>;
 
-    fn to_wire(&self, stream: &mut dyn Write, opt: &Options);
+    fn serialize(&self, stream: &mut dyn Write, opt: &Options);
 }
 
 pub struct Options {
@@ -55,7 +55,7 @@ pub fn write<T: Command + Serializable>(message: &T, stream: &mut dyn Write, mag
     );
 
     let mut payload: Vec<u8> = Vec::new();
-    message.to_wire(&mut payload, opt);
+    message.serialize(&mut payload, opt);
 
     let length: u32 = payload.len() as u32;
     let checksum = checksum(&payload);
@@ -156,7 +156,7 @@ impl Serializable for VarInt {
         }
     }
 
-    fn to_wire(&self, stream: &mut dyn Write, _opt: &Options) {
+    fn serialize(&self, stream: &mut dyn Write, _opt: &Options) {
         match self {
             VarInt::U8(n) => stream.write_u8(*n).unwrap(),
             VarInt::U16(n) => {
@@ -205,8 +205,8 @@ impl Serializable for VarString {
         )
     }
 
-    fn to_wire(&self, stream: &mut dyn Write, opt: &Options) {
-        self.length.to_wire(stream, opt);
+    fn serialize(&self, stream: &mut dyn Write, opt: &Options) {
+        self.length.serialize(stream, opt);
         stream.write(self.string.as_bytes()).unwrap();
     }
 }
@@ -267,7 +267,7 @@ impl Serializable for Address {
         )
     }
 
-    fn to_wire(&self, stream: &mut dyn Write, opt: &Options) {
+    fn serialize(&self, stream: &mut dyn Write, opt: &Options) {
         if opt.version >= 31402 && !opt.is_version_message {
             stream.write_u32::<LittleEndian>(self.timestamp).unwrap();
         }
@@ -361,14 +361,14 @@ impl Serializable for Version {
         )
     }
 
-    fn to_wire(&self, stream: &mut dyn Write, _opt: &Options) {
+    fn serialize(&self, stream: &mut dyn Write, _opt: &Options) {
         stream.write_i32::<LittleEndian>(self.version).unwrap();
         stream.write_u64::<LittleEndian>(self.services).unwrap();
         stream.write_i64::<LittleEndian>(self.timestamp).unwrap();
-        self.addr_recv.to_wire(stream, &Options{version: 0, is_version_message: true});
-        self.addr_from.to_wire(stream, &Options{version: 0, is_version_message: true});
+        self.addr_recv.serialize(stream, &Options{version: 0, is_version_message: true});
+        self.addr_from.serialize(stream, &Options{version: 0, is_version_message: true});
         stream.write_u64::<LittleEndian>(self.nonce).unwrap();
-        VarString::new(&self.user_agent).to_wire(stream, _opt);
+        VarString::new(&self.user_agent).serialize(stream, _opt);
         stream.write_i32::<LittleEndian>(self.start_height).unwrap();
         if self.version >= 70001 {
             match self.relay {
@@ -393,7 +393,7 @@ impl Serializable for Verack {
         Box::new(Self{})
     }
 
-    fn to_wire(&self, _stream: &mut dyn Write, _opt: &Options) {
+    fn serialize(&self, _stream: &mut dyn Write, _opt: &Options) {
     }
 }
 
@@ -426,10 +426,10 @@ impl Serializable for Addr {
         )
     }
 
-    fn to_wire(&self, stream: &mut dyn Write, opt: &Options) {
-        self.count.to_wire(stream, opt);
+    fn serialize(&self, stream: &mut dyn Write, opt: &Options) {
+        self.count.serialize(stream, opt);
         for addr in self.addr_list.iter() {
-            addr.to_wire(stream, opt);
+            addr.serialize(stream, opt);
         }
     }
 }
@@ -446,7 +446,7 @@ impl Serializable for Alert {
         )
     }
 
-    fn to_wire(&self, _stream: &mut dyn Write, _opt: &Options) {
+    fn serialize(&self, _stream: &mut dyn Write, _opt: &Options) {
         panic!("Not implemented");
     }
 }
@@ -464,7 +464,7 @@ impl Serializable for Ping {
         )
     }
 
-    fn to_wire(&self, stream: &mut dyn Write, _opt: &Options) {
+    fn serialize(&self, stream: &mut dyn Write, _opt: &Options) {
         stream.write_u64::<LittleEndian>(self.nonce).unwrap();
     }
 }
@@ -488,7 +488,7 @@ impl Serializable for Pong {
         )
     }
 
-    fn to_wire(&self, stream: &mut dyn Write, _opt: &Options) {
+    fn serialize(&self, stream: &mut dyn Write, _opt: &Options) {
         stream.write_u64::<LittleEndian>(self.nonce).unwrap();
     }
 }
@@ -513,7 +513,7 @@ impl Serializable for Getaddr {
         Box::new(Self{})
     }
 
-    fn to_wire(&self, _stream: &mut dyn Write, _opt: &Options) {
+    fn serialize(&self, _stream: &mut dyn Write, _opt: &Options) {
     }
 }
 
@@ -531,7 +531,7 @@ mod tests {
         };
 
         let mut buf: Vec<u8> = Vec::new();
-        n.to_wire(&mut buf, &opt);
+        n.serialize(&mut buf, &opt);
 
         let mut buf = buf.as_slice();
         let n: Box<VarInt> = VarInt::parse(&mut buf, &opt);
@@ -552,7 +552,7 @@ mod tests {
         };
 
         let mut buf: Vec<u8> = Vec::new();
-        n.to_wire(&mut buf, &opt);
+        n.serialize(&mut buf, &opt);
 
         let mut buf = buf.as_slice();
         let n: Box<VarInt> = VarInt::parse(&mut buf, &opt);
@@ -573,7 +573,7 @@ mod tests {
         };
 
         let mut buf: Vec<u8> = Vec::new();
-        n.to_wire(&mut buf, &opt);
+        n.serialize(&mut buf, &opt);
 
         let mut buf = buf.as_slice();
         let n: Box<VarInt> = VarInt::parse(&mut buf, &opt);
@@ -594,7 +594,7 @@ mod tests {
         };
 
         let mut buf: Vec<u8> = Vec::new();
-        n.to_wire(&mut buf, &opt);
+        n.serialize(&mut buf, &opt);
 
         let mut buf = buf.as_slice();
         let n: Box<VarInt> = VarInt::parse(&mut buf, &opt);
@@ -612,7 +612,7 @@ mod tests {
         let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: true};
 
         let mut buf: Vec<u8> = Vec::new();
-        s.to_wire(&mut buf, &opt);
+        s.serialize(&mut buf, &opt);
 
         let mut buf = buf.as_slice();
         let s: Box<VarString> = VarString::parse(&mut buf, &opt);
@@ -628,7 +628,7 @@ mod tests {
         let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: true};
 
         let mut buf: Vec<u8> = Vec::new();
-        expected_address.to_wire(&mut buf, & opt);
+        expected_address.serialize(&mut buf, & opt);
 
         let mut buf = buf.as_slice();
         let address: Box<Address> = Address::parse(&mut buf, &opt);
@@ -646,7 +646,7 @@ mod tests {
         let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: false};
 
         let mut buf: Vec<u8> = Vec::new();
-        expected_address.to_wire(&mut buf, & opt);
+        expected_address.serialize(&mut buf, & opt);
 
         let mut buf = buf.as_slice();
         let address: Box<Address> = Address::parse(&mut buf, &opt);
@@ -667,7 +667,7 @@ mod tests {
         let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: true};
 
         let mut buf: Vec<u8> = Vec::new();
-        expected.to_wire(&mut buf, &opt);
+        expected.serialize(&mut buf, &opt);
 
         let mut buf = buf.as_slice();
         let version: Box<Version> = Version::parse(&mut buf, &opt);
@@ -724,7 +724,7 @@ mod tests {
         let expected: Addr = Addr{count: count, addr_list: addr_list};
 
         let mut buf: Vec<u8> = Vec::new();
-        expected.to_wire(&mut buf, &opt);
+        expected.serialize(&mut buf, &opt);
 
         let mut buf = buf.as_slice();
         let addr: Box<Addr> = Addr::parse(&mut buf, &opt);
