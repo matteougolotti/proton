@@ -43,6 +43,8 @@ pub enum Message {
     Ping(Ping),
     Pong(Pong),
     Alert(Alert),
+    Addr(Addr),
+    Getaddr(Getaddr),
 }
 
 pub fn write<T: Command + Serializable>(message: &T, stream: &mut dyn Write, magic: Network, opt: &Options) {
@@ -106,6 +108,8 @@ pub fn read(data: &mut [u8], opt: &Options) -> Result<(Box<Message>, usize), ()>
                 "alert" => Ok((Box::new(Message::Alert(*Alert::parse(&mut payload.as_slice(), opt))), size)),
                 "ping" => Ok((Box::new(Message::Ping(*Ping::parse(&mut payload.as_slice(), opt))), size)),
                 "pong" => Ok((Box::new(Message::Pong(*Pong::parse(&mut payload.as_slice(), opt))), size)),
+                "getaddr" => Ok((Box::new(Message::Getaddr(*Getaddr::parse(&mut payload.as_slice(), opt))), size)),
+                "addr" => Ok((Box::new(Message::Addr(*Addr::parse(&mut payload.as_slice(), opt))), size)),
                 command => {
                     println!("Unable to process command => {}", command);
                     Err(())

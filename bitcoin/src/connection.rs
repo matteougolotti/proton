@@ -115,7 +115,13 @@ impl Connection {
             },
             Message::Pong(pong) => {
                 println!("RECEIVED => pong {}", pong.nonce);
-            }
+            },
+            Message::Getaddr(_getaddr) => {
+                println!("RECEIVED => getaddr");
+            },
+            Message::Addr(_addr) => {
+                println!("RECEIVED => addr");
+            },
         }
     }
 
