@@ -211,6 +211,7 @@ impl Serializable for VarString {
     }
 }
 
+#[derive(Eq, Hash, PartialEq)]
 pub struct Address {
     pub timestamp: u32,
     pub services: u64,

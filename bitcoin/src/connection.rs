@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::io::{Read, Write};
 use std::net::{IpAddr, TcpStream, Shutdown};
+use std::sync::mpsc::{Sender};
 
 use super::messages::{
     Address,
@@ -20,15 +21,17 @@ pub struct Connection {
     pub peer: String,
     pub network: Network,
     pub version: Cell<i32>,
+    tx: Sender<Message>,
     stop: std::sync::RwLock<bool>,
 }
 
 impl Connection {
-    pub fn new(peer: String, network: Network, version: i32) -> Self {
-        Self{
+    pub fn new(peer: String, network: Network, version: i32, tx: Sender<Message>) -> Self {
+        Self {
             peer: peer,
             network: network,
             version: Cell::new(version),
+            tx: tx,
             stop: std::sync::RwLock::new(false),
         }
     }
@@ -36,8 +39,6 @@ impl Connection {
     pub fn connect(&self) -> std::io::Result<()> {
         self.version.set(super::messages::PROTOCOL_VERSION);
         let mut stream = TcpStream::connect(&self.peer)?;
-
-        self.init_connection(&mut stream);
 
         self.run(&mut stream);
 
@@ -49,16 +50,14 @@ impl Connection {
         *stop = true;
     }
 
-    fn init_connection(&self, stream: &mut TcpStream) {
+    fn run(&self, stream: &mut TcpStream) {
         let opt: Options = Options{version: super::messages::PROTOCOL_VERSION, is_version_message: true};
         let local_addr: IpAddr = stream.local_addr().unwrap().ip();
         let peer_addr: IpAddr = stream.peer_addr().unwrap().ip();
 
         self.send(stream, &Version::new(Address::new(local_addr), Address::new(peer_addr), 1), &opt);
         println!("SENT => Version");
-    }
 
-    fn run(&self, stream: &mut TcpStream) {
         let opt: Options = Options{version: self.version.get(), is_version_message: false};
         let mut parse_buff: Vec<u8> = Vec::new();
         let mut read_buff: Vec<u8> = vec![0; MTU];
