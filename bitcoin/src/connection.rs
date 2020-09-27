@@ -1,38 +1,47 @@
 use std::cell::Cell;
 use std::io::{Read, Write};
 use std::net::{IpAddr, TcpStream, Shutdown};
-use std::sync::mpsc::{Sender};
+use std::sync::mpsc::{Receiver, Sender};
 
 use super::messages::{
     Address,
-    Command,
-    Message,
+    BitcoinMessage,
     Network,
     Options,
     Pong,
-    Serializable,
     Verack,
     Version,
 };
 
 const MTU: usize = 1500;
 
+pub type ConnectionId = u32;
+
+pub enum Message {
+    IncomingBitcoinMessage((ConnectionId, BitcoinMessage)),
+    OutgoingBitcoinMessage(BitcoinMessage),
+    Disconnected(ConnectionId),
+    Disconnect,
+}
+
 pub struct Connection {
+    pub id: ConnectionId,
     pub peer: String,
     pub network: Network,
     pub version: Cell<i32>,
+    rx: Receiver<Message>,
     tx: Sender<Message>,
-    stop: std::sync::RwLock<bool>,
 }
 
 impl Connection {
-    pub fn new(peer: String, network: Network, version: i32, tx: Sender<Message>) -> Self {
+    pub fn new(id: ConnectionId, peer: String, network: Network, version: i32, rx: Receiver<Message>, tx: Sender<Message>) -> Self {
         Self {
+            id: id,
             peer: peer,
             network: network,
             version: Cell::new(version),
+            rx: rx,
             tx: tx,
-            stop: std::sync::RwLock::new(false),
         }
     }
 
@@ -45,24 +54,27 @@ impl Connection {
         Ok(())
     }
 
-    pub fn disconnect(&self) {
-        let mut stop = self.stop.write().unwrap();
-        *stop = true;
-    }
-
     fn run(&self, stream: &mut TcpStream) {
         let opt: Options = Options{version: super::messages::PROTOCOL_VERSION, is_version_message: true};
         let local_addr: IpAddr = stream.local_addr().unwrap().ip();
         let peer_addr: IpAddr = stream.peer_addr().unwrap().ip();
 
-        self.send(stream, &Version::new(Address::new(local_addr), Address::new(peer_addr), 1), &opt);
+        self.send(stream, &BitcoinMessage::Version(Version::new(Address::new(local_addr), Address::new(peer_addr), 1)), &opt);
         println!("SENT => Version");
 
         let opt: Options = Options{version: self.version.get(), is_version_message: false};
         let mut parse_buff: Vec<u8> = Vec::new();
         let mut read_buff: Vec<u8> = vec![0; MTU];
 
-        while !(*self.stop.read().unwrap()) {
+        loop {
+            match self.rx.try_recv() {
+                Ok(Message::Disconnect) => break,
+                Ok(Message::OutgoingBitcoinMessage(message)) => {
+                    self.send(stream, &message, &Options{version: super::messages::PROTOCOL_VERSION, is_version_message: false});
+                },
+                _ => (),
+            }
+
             match stream.read(&mut read_buff) {
                 Ok(bytes_read) if bytes_read > 0 || parse_buff.len() > 0 => {
                     println!("Read {} bytes", bytes_read);
@@ -73,7 +85,7 @@ impl Connection {
                     match super::messages::read(&mut parse_buff, &opt) {
                         Ok((message, n)) => {
                             println!("Parsed {} bytes", n);
-                            self.handle_message(&message, stream);
+                            self.handle_bitcoin_message(*message, stream);
                             parse_buff.drain(0..n);
                         },
                         Err(_) => {
@@ -83,7 +95,7 @@ impl Connection {
                 },
                 Ok(_) => (),
                 Err(_) => {
-                    stream.shutdown(Shutdown::Both).unwrap();
+                    self.tx.send(Message::Disconnected(self.id)).unwrap();
                     break;
                 }
             }
@@ -92,40 +104,37 @@ impl Connection {
         stream.shutdown(Shutdown::Both).unwrap();
     }
 
-    fn handle_message(&self, message: &Message, stream: &mut TcpStream) {
+    fn handle_bitcoin_message(&self, message: BitcoinMessage, stream: &mut TcpStream) {
         let opt: Options = Options{version: super::messages::PROTOCOL_VERSION, is_version_message: false};
 
         match message {
-            Message::Version(version) => {
+            BitcoinMessage::Version(version) => {
                 println!("RECEIVED => version");
                 self.version.set(std::cmp::min(super::messages::PROTOCOL_VERSION, version.version));
             },
-            Message::Verack(_verack) => {
+            BitcoinMessage::Verack(_verack) => {
                 println!("RECEIVED => verack");
-                self.send(stream, &Verack{}, &opt);
+                self.send(stream, &BitcoinMessage::Verack(Verack{}), &opt);
             },
-            Message::Alert(_alert) => {
+            BitcoinMessage::Alert(_alert) => {
                 println!("RECEIVED => alert");
             },
-            Message::Ping(ping) => {
+            BitcoinMessage::Ping(ping) => {
                 println!("RECEIVED => ping {}", ping.nonce);
                 let pong: Pong = Pong{nonce: ping.nonce};
-                self.send(stream, &pong, &opt);
-                println!("SENT => pong {}", pong.nonce);
+                self.send(stream, &BitcoinMessage::Pong(pong), &opt);
+                println!("SENT => pong {}", ping.nonce);
             },
-            Message::Pong(pong) => {
+            BitcoinMessage::Pong(pong) => {
                 println!("RECEIVED => pong {}", pong.nonce);
             },
-            Message::Getaddr(_getaddr) => {
-                println!("RECEIVED => getaddr");
-            },
-            Message::Addr(_addr) => {
-                println!("RECEIVED => addr");
-            },
+            _ => self.tx.send(Message::IncomingBitcoinMessage((self.id, message))).unwrap()
         }
     }
 
-    fn send<T: Command + Serializable>(&self, stream: &mut dyn Write, message: &T, opt: &Options) {
-        super::messages::write(message, stream, self.network, opt);
+    fn send(&self, stream: &mut dyn Write, message: &BitcoinMessage, opt: &Options) {
+        let mut buf: Vec<u8> = Vec::new();
+        super::messages::write(message, &mut buf, self.network, opt);
+        stream.write_all(&buf).unwrap();
     }
 }

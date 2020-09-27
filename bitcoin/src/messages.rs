@@ -22,10 +22,6 @@ pub enum Network {
     TESTNET = 0xDAB5BFFA,
 }
 
-pub trait Command {
-    fn command(&self) -> String;
-}
-
 pub trait Serializable {
     fn parse(stream: &mut dyn Read, opt: &Options) -> Box<Self>;
 
@@ -37,7 +33,7 @@ pub struct Options {
     pub is_version_message: bool,
 }
 
-pub enum Message {
+pub enum BitcoinMessage {
     Version(Version),
     Verack(Verack),
     Ping(Ping),
@@ -47,7 +43,21 @@ pub enum Message {
     Getaddr(Getaddr),
 }
 
-pub fn write<T: Command + Serializable>(message: &T, stream: &mut dyn Write, magic: Network, opt: &Options) {
+impl BitcoinMessage {
+    fn command(&self) -> String {
+        match self {
+            BitcoinMessage::Version(_) => String::from("version"),
+            BitcoinMessage::Verack(_) => String::from("verack"),
+            BitcoinMessage::Ping(_) => String::from("ping"),
+            BitcoinMessage::Pong(_) => String::from("pong"),
+            BitcoinMessage::Alert(_) => String::from("alert"),
+            BitcoinMessage::Addr(_) => String::from("addr"),
+            BitcoinMessage::Getaddr(_) => String::from("getaddr"),
+        }
+    }
+}
+
+pub fn write(message: &BitcoinMessage, stream: &mut Vec<u8>, magic: Network, opt: &Options) {
     let mut command: [u8; 12] = Default::default();
 
     let cmd: String = message.command();
@@ -57,7 +67,15 @@ pub fn write<T: Command + Serializable>(message: &T, stream: &mut dyn Write, mag
     );
 
     let mut payload: Vec<u8> = Vec::new();
-    message.serialize(&mut payload, opt);
+    match message {
+        BitcoinMessage::Version(version) => version.serialize(&mut payload, &Options{version: PROTOCOL_VERSION, is_version_message: true}),
+        BitcoinMessage::Verack(verack) => verack.serialize(&mut payload, opt),
+        BitcoinMessage::Ping(ping) => ping.serialize(&mut payload, opt),
+        BitcoinMessage::Pong(pong) => pong.serialize(&mut payload, opt),
+        BitcoinMessage::Alert(alert) => alert.serialize(&mut payload, opt),
+        BitcoinMessage::Addr(addr) => addr.serialize(&mut payload, opt),
+        BitcoinMessage::Getaddr(getaddr) => getaddr.serialize(&mut payload, opt),
+    }
 
     let length: u32 = payload.len() as u32;
     let checksum = checksum(&payload);
@@ -69,7 +87,7 @@ pub fn write<T: Command + Serializable>(message: &T, stream: &mut dyn Write, mag
     stream.write_all(&payload).unwrap();
 }
 
-pub fn read(data: &mut [u8], opt: &Options) -> Result<(Box<Message>, usize), ()> {
+pub fn read(data: &mut [u8], opt: &Options) -> Result<(Box<BitcoinMessage>, usize), ()> {
     static FIXED_HEADER_SIZE: usize = 24;
     let data_len: u32 = data.len() as u32;
     let mut stream = std::io::Cursor::new(data);
@@ -98,18 +116,18 @@ pub fn read(data: &mut [u8], opt: &Options) -> Result<(Box<Message>, usize), ()>
         true => {
             match std::str::from_utf8(&command).unwrap() {
                 "version" => Ok((
-                        Box::new(Message::Version(*Version::parse(
+                        Box::new(BitcoinMessage::Version(*Version::parse(
                             &mut payload.as_slice(),
                             &Options{version: opt.version, is_version_message: true}
                         ))),
                         size
                 )),
-                "verack" => Ok((Box::new(Message::Verack(*Verack::parse(&mut payload.as_slice(), opt))), size)),
-                "alert" => Ok((Box::new(Message::Alert(*Alert::parse(&mut payload.as_slice(), opt))), size)),
-                "ping" => Ok((Box::new(Message::Ping(*Ping::parse(&mut payload.as_slice(), opt))), size)),
-                "pong" => Ok((Box::new(Message::Pong(*Pong::parse(&mut payload.as_slice(), opt))), size)),
-                "getaddr" => Ok((Box::new(Message::Getaddr(*Getaddr::parse(&mut payload.as_slice(), opt))), size)),
-                "addr" => Ok((Box::new(Message::Addr(*Addr::parse(&mut payload.as_slice(), opt))), size)),
+                "verack" => Ok((Box::new(BitcoinMessage::Verack(*Verack::parse(&mut payload.as_slice(), opt))), size)),
+                "alert" => Ok((Box::new(BitcoinMessage::Alert(*Alert::parse(&mut payload.as_slice(), opt))), size)),
+                "ping" => Ok((Box::new(BitcoinMessage::Ping(*Ping::parse(&mut payload.as_slice(), opt))), size)),
+                "pong" => Ok((Box::new(BitcoinMessage::Pong(*Pong::parse(&mut payload.as_slice(), opt))), size)),
+                "getaddr" => Ok((Box::new(BitcoinMessage::Getaddr(*Getaddr::parse(&mut payload.as_slice(), opt))), size)),
+                "addr" => Ok((Box::new(BitcoinMessage::Addr(*Addr::parse(&mut payload.as_slice(), opt))), size)),
                 command => {
                     println!("Unable to process command => {}", command);
                     Err(())
@@ -326,12 +344,6 @@ impl Version {
     }
 }
 
-impl Command for Version {
-    fn command(&self) -> String {
-        String::from("version")
-    }
-}
-
 impl Serializable for Version {
     fn parse(stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
         let opt: Options = Options {
@@ -387,12 +399,6 @@ impl Serializable for Version {
 pub struct Verack {
 }
 
-impl Command for Verack {
-    fn command(&self) -> String {
-        String::from("verack")
-    }
-}
-
 impl Serializable for Verack {
     fn parse(_stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
         Box::new(Self{})
@@ -405,12 +411,6 @@ impl Serializable for Verack {
 pub struct Addr {
     pub count: VarInt,
     pub addr_list: Vec<Address>,
-}
-
-impl Command for Addr {
-    fn command(&self) -> String {
-        String::from("addr")
-    }
 }
 
 impl Serializable for Addr {
@@ -474,12 +474,6 @@ impl Serializable for Ping {
     }
 }
 
-impl Command for Ping {
-    fn command(&self) -> String {
-        String::from("ping")
-    }
-}
-
 pub struct Pong {
     pub nonce: u64,
 }
@@ -498,19 +492,7 @@ impl Serializable for Pong {
     }
 }
 
-impl Command for Pong {
-    fn command(&self) -> String {
-        String::from("pong")
-    }
-}
-
 pub struct Getaddr {
-}
-
-impl Command for Getaddr {
-    fn command(&self) -> String {
-        String::from("getaddr")
-    }
 }
 
 impl Serializable for Getaddr {
@@ -677,7 +659,6 @@ mod tests {
         let mut buf = buf.as_slice();
         let version: Box<Version> = Version::parse(&mut buf, &opt);
 
-        assert_eq!(expected.command(), version.command());
         assert_eq!(expected.version, version.version);
         assert_eq!(expected.services, version.services);
         assert_eq!(expected.timestamp, version.timestamp);
@@ -686,37 +667,6 @@ mod tests {
         assert_eq!(expected.addr_from.ip, version.addr_from.ip);
         assert_eq!(expected.user_agent, version.user_agent);
         assert_eq!(expected.start_height, version.start_height);
-    }
-
-    #[test]
-    fn test_version_write_read() {
-        let expected: Version = Version::new(
-            Address::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2))),
-            Address::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 3))),
-            super::PROTOCOL_SERVICES,
-        );
-        let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: true};
-
-        let mut buffer: Vec<u8> = Vec::new();
-        write(&expected, &mut buffer, Network::TESTNET, &opt);
-
-        let actual: Version = match read(&mut buffer, &opt) {
-            Ok((message, _n)) => match *message {
-                Message::Version(version) => version,
-                _ => panic!(),
-            },
-            Err(_) => panic!()
-        };
-
-        assert_eq!(expected.version, actual.version);
-        assert_eq!(expected.command(), actual.command());
-        assert_eq!(expected.services, actual.services);
-        assert_eq!(expected.timestamp, actual.timestamp);
-        assert_eq!(expected.nonce, actual.nonce);
-        assert_eq!(expected.addr_recv.ip, actual.addr_recv.ip);
-        assert_eq!(expected.addr_from.ip, actual.addr_from.ip);
-        assert_eq!(expected.user_agent, actual.user_agent);
-        assert_eq!(expected.start_height, actual.start_height);
     }
 
     #[test]
