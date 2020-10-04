@@ -33,6 +33,7 @@ pub struct Options {
     pub is_version_message: bool,
 }
 
+#[derive(Debug)]
 pub enum BitcoinMessage {
     Version(Version),
     Verack(Verack),
@@ -138,6 +139,7 @@ pub fn read(data: &mut [u8], opt: &Options) -> Result<(Box<BitcoinMessage>, usiz
     }
 }
 
+#[derive(Debug)]
 pub enum VarInt {
     U8(u8),
     U16(u16),
@@ -233,7 +235,7 @@ impl Serializable for VarString {
     }
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub struct Address {
     pub timestamp: u32,
     pub services: u64,
@@ -310,6 +312,7 @@ impl Serializable for Address {
     }
 }
 
+#[derive(Debug)]
 pub struct Version {
     pub version: i32,
     pub services: u64,
@@ -396,6 +399,7 @@ impl Serializable for Version {
     }
 }
 
+#[derive(Debug)]
 pub struct Verack {
 }
 
@@ -408,6 +412,7 @@ impl Serializable for Verack {
     }
 }
 
+#[derive(Debug)]
 pub struct Addr {
     pub count: VarInt,
     pub addr_list: Vec<Address>,
@@ -439,6 +444,7 @@ impl Serializable for Addr {
     }
 }
 
+#[derive(Debug)]
 pub struct Alert {
     // Alerts have been decommissioned, so we fake parsing
 }
@@ -456,6 +462,7 @@ impl Serializable for Alert {
     }
 }
 
+#[derive(Debug)]
 pub struct Ping {
     pub nonce: u64,
 }
@@ -474,6 +481,7 @@ impl Serializable for Ping {
     }
 }
 
+#[derive(Debug)]
 pub struct Pong {
     pub nonce: u64,
 }
@@ -492,6 +500,7 @@ impl Serializable for Pong {
     }
 }
 
+#[derive(Debug)]
 pub struct Getaddr {
 }
 

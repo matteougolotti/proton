@@ -1,6 +1,5 @@
-use std::sync::mpsc::channel;
-use std::sync::mpsc::{Receiver, Sender};
-use std::thread;
+use tokio::sync::mpsc::channel;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 use super::connection::{
     Connection,
@@ -35,26 +34,24 @@ impl Node {
         }
     }
 
-    pub fn start(&self) -> std::io::Result<()> {
-        let (tx, rx): (Sender<Message>, Receiver<Message>) = channel();
+    pub async fn start(&self) -> std::io::Result<()> {
+        let (tx, mut rx): (Sender<Message>, Receiver<Message>) = channel(256);
 
-        let (conn_tx, conn_rx): (Sender<Message>, Receiver<Message>) = channel();
+        let (conn_tx, conn_rx): (Sender<Message>, Receiver<Message>) = channel(256);
         let connection: Connection = Connection::new(
             0,
             String::from(BOOTSTRAP_DNS_SEEDS[0]),
             super::messages::Network::MAINNET,
             super::messages::PROTOCOL_VERSION,
-            conn_rx,
-            tx,
         );
 
-        thread::spawn(move || {
-            connection.connect().unwrap();
+        tokio::spawn(async move {
+            connection.run(conn_rx, tx).await.unwrap();
         });
 
         while !(*self.stop.read().unwrap()) {
-            match rx.recv() {
-                Ok(message) => self.handle_message(&message),
+            match rx.recv().await {
+                Some(message) => self.handle_message(&message),
                 _ => (),
             }
         }
