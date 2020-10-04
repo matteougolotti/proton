@@ -1,3 +1,6 @@
+use std::net::IpAddr;
+use std::time::SystemTime;
+
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -7,6 +10,7 @@ use super::connection::{
     Message,
 };
 use super::messages::{
+    Addr,
     Address,
     BitcoinMessage,
 };
@@ -20,16 +24,16 @@ const BOOTSTRAP_DNS_SEEDS: [&str; 5] = [
 ];
 
 pub struct Node {
-    connections: std::collections::HashMap<ConnectionId, Connection>,
-    peers: std::collections::HashSet<Address>,
+    connections: std::cell::RefCell<std::collections::HashMap<ConnectionId, Connection>>,
+    peers: std::cell::RefCell<std::collections::HashMap<(IpAddr, u16), Address>>,
     stop: std::sync::RwLock<bool>,
 }
 
 impl Node {
     pub fn new() -> Self {
         Self{
-            connections: std::collections::HashMap::new(),
-            peers: std::collections::HashSet::new(),
+            connections: std::cell::RefCell::new(std::collections::HashMap::new()),
+            peers: std::cell::RefCell::new(std::collections::HashMap::new()),
             stop: std::sync::RwLock::new(false),
         }
     }
@@ -51,7 +55,7 @@ impl Node {
 
         while !(*self.stop.read().unwrap()) {
             match rx.recv().await {
-                Some(message) => self.handle_message(&message),
+                Some(message) => self.handle_message(message),
                 _ => (),
             }
         }
@@ -64,7 +68,7 @@ impl Node {
         *stop = true;
     }
 
-    fn handle_message(&self, message: &Message) {
+    fn handle_message(&self, message: Message) {
         match message {
             Message::IncomingBitcoinMessage((connection_id, message)) => {
                 self.handle_bitcoin_message(connection_id, message);
@@ -78,15 +82,35 @@ impl Node {
         }
     }
 
-    fn handle_bitcoin_message(&self, _connection_id: &ConnectionId, message: &BitcoinMessage) {
+    fn handle_bitcoin_message(&self, _connection_id: ConnectionId, message: BitcoinMessage) {
         match message {
             BitcoinMessage::Getaddr(_getaddr) => {
                 println!("RECEIVED => getaddr");
             },
-            BitcoinMessage::Addr(_addr) => {
+            BitcoinMessage::Addr(addr) => {
                 println!("RECEIVED => addr");
+                self.remove_old_peers();
+                self.add_new_peers(addr);
             },
-            _ => (),
+            _ => {
+                println!("RECEIVED => unknown");
+            },
+        }
+    }
+
+    fn add_new_peers(&self, addr: Addr) {
+        for address in addr.addr_list {
+            let key = (address.ip, address.port);
+            self.peers.borrow_mut().insert(key, address);
+        }
+    }
+
+    fn remove_old_peers(&self) {
+        let now: u32 = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as u32;
+        for (key, address) in self.peers.borrow_mut().iter() {
+            if now - address.timestamp > 10800 {
+                self.peers.borrow_mut().remove(key);
+            }
         }
     }
 }
