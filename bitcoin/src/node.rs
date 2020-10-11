@@ -92,6 +92,9 @@ impl Node {
                 self.remove_old_peers();
                 self.add_new_peers(addr);
             },
+            BitcoinMessage::Getheaders(_getheaders) => {
+                println!("RECEIVED => getheaders");
+            },
             _ => {
                 println!("RECEIVED => unknown");
             },

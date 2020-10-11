@@ -42,6 +42,7 @@ pub enum BitcoinMessage {
     Alert(Alert),
     Addr(Addr),
     Getaddr(Getaddr),
+    Getheaders(Getheaders),
 }
 
 impl BitcoinMessage {
@@ -54,6 +55,7 @@ impl BitcoinMessage {
             BitcoinMessage::Alert(_) => String::from("alert"),
             BitcoinMessage::Addr(_) => String::from("addr"),
             BitcoinMessage::Getaddr(_) => String::from("getaddr"),
+            BitcoinMessage::Getheaders(_) => String::from("getheaders"),
         }
     }
 }
@@ -76,6 +78,7 @@ pub fn write(message: &BitcoinMessage, stream: &mut Vec<u8>, magic: Network, opt
         BitcoinMessage::Alert(alert) => alert.serialize(&mut payload, opt),
         BitcoinMessage::Addr(addr) => addr.serialize(&mut payload, opt),
         BitcoinMessage::Getaddr(getaddr) => getaddr.serialize(&mut payload, opt),
+        BitcoinMessage::Getheaders(getheaders) => getheaders.serialize(&mut payload, opt),
     }
 
     let length: u32 = payload.len() as u32;
@@ -513,6 +516,43 @@ impl Serializable for Getaddr {
     }
 }
 
+#[derive(Debug)]
+pub struct Getheaders {
+    pub version: u32,
+    pub hash_count: VarInt,
+    pub block_locator_hashes: [u8; 32],
+    pub hash_stop: [u8; 32],
+}
+
+impl Serializable for Getheaders {
+    fn parse(stream: &mut dyn Read, opt: &Options) -> Box<Self> {
+        let version: u32 = stream.read_u32::<LittleEndian>().unwrap();
+        let hash_count: VarInt = *VarInt::parse(stream, opt);
+
+        let mut block_locator_hashes: [u8; 32] = [0; 32];
+        stream.read_exact(&mut block_locator_hashes).unwrap();
+
+        let mut hash_stop: [u8; 32] = [0; 32];
+        stream.read_exact(&mut hash_stop).unwrap();
+
+        Box::new(
+            Self {
+                version: version,
+                hash_count: hash_count,
+                block_locator_hashes: block_locator_hashes,
+                hash_stop: hash_stop,
+            }
+        )
+    }
+
+    fn serialize(&self, stream: &mut dyn Write, opt: &Options) {
+        stream.write_u32::<LittleEndian>(self.version).unwrap();
+        self.hash_count.serialize(stream, opt);
+        stream.write_all(&self.block_locator_hashes).unwrap();
+        stream.write_all(&self.hash_stop).unwrap();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -696,5 +736,27 @@ mod tests {
         assert_eq!(expected.count.as_usize(), addr.count.as_usize());
         assert_eq!(expected.addr_list[0].ip, addr.addr_list[0].ip);
         assert_eq!(expected.addr_list[0].port, addr.addr_list[0].port);
+    }
+
+    #[test]
+    fn test_getheaders() {
+        let opt: Options = Options{version: super::PROTOCOL_VERSION, is_version_message: false};
+        let expected: Getheaders = Getheaders{
+            version: 32,
+            hash_count: VarInt::new(100),
+            block_locator_hashes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
+            hash_stop: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
+        };
+
+        let mut buf: Vec<u8> = Vec::new();
+        expected.serialize(&mut buf, &opt);
+
+        let mut buf = buf.as_slice();
+        let getheaders: Box<Getheaders> = Getheaders::parse(&mut buf, &opt);
+
+        assert_eq!(expected.version, getheaders.version);
+        assert_eq!(expected.hash_count.as_usize(), getheaders.hash_count.as_usize());
+        assert_eq!(expected.block_locator_hashes, getheaders.block_locator_hashes);
+        assert_eq!(expected.hash_stop, getheaders.hash_stop);
     }
 }
