@@ -131,6 +131,7 @@ pub fn read(data: &mut [u8], opt: &Options) -> Result<(Box<BitcoinMessage>, usiz
                 "ping" => Ok((Box::new(BitcoinMessage::Ping(*Ping::parse(&mut payload.as_slice(), opt))), size)),
                 "pong" => Ok((Box::new(BitcoinMessage::Pong(*Pong::parse(&mut payload.as_slice(), opt))), size)),
                 "getaddr" => Ok((Box::new(BitcoinMessage::Getaddr(*Getaddr::parse(&mut payload.as_slice(), opt))), size)),
+                "getheaders" => Ok((Box::new(BitcoinMessage::Getheaders(*Getheaders::parse(&mut payload.as_slice(), opt))), size)),
                 "addr" => Ok((Box::new(BitcoinMessage::Addr(*Addr::parse(&mut payload.as_slice(), opt))), size)),
                 command => {
                     println!("Unable to process command => {}", command);
