@@ -43,6 +43,7 @@ pub enum BitcoinMessage {
     Addr(Addr),
     Getaddr(Getaddr),
     Getheaders(Getheaders),
+    Inv(Inv),
 }
 
 impl BitcoinMessage {
@@ -56,6 +57,7 @@ impl BitcoinMessage {
             BitcoinMessage::Addr(_) => String::from("addr"),
             BitcoinMessage::Getaddr(_) => String::from("getaddr"),
             BitcoinMessage::Getheaders(_) => String::from("getheaders"),
+            BitcoinMessage::Inv(_) => String::from("inv"),
         }
     }
 }
@@ -79,6 +81,7 @@ pub fn write(message: &BitcoinMessage, stream: &mut Vec<u8>, magic: Network, opt
         BitcoinMessage::Addr(addr) => addr.serialize(&mut payload, opt),
         BitcoinMessage::Getaddr(getaddr) => getaddr.serialize(&mut payload, opt),
         BitcoinMessage::Getheaders(getheaders) => getheaders.serialize(&mut payload, opt),
+        BitcoinMessage::Inv(inv) => inv.serialize(&mut payload, opt),
     }
 
     let length: u32 = payload.len() as u32;
@@ -133,6 +136,7 @@ pub fn read(data: &mut [u8], opt: &Options) -> Result<(Box<BitcoinMessage>, usiz
                 "getaddr" => Ok((Box::new(BitcoinMessage::Getaddr(*Getaddr::parse(&mut payload.as_slice(), opt))), size)),
                 "getheaders" => Ok((Box::new(BitcoinMessage::Getheaders(*Getheaders::parse(&mut payload.as_slice(), opt))), size)),
                 "addr" => Ok((Box::new(BitcoinMessage::Addr(*Addr::parse(&mut payload.as_slice(), opt))), size)),
+                "inv" => Ok((Box::new(BitcoinMessage::Inv(*Inv::parse(&mut payload.as_slice(), opt))), size)),
                 command => {
                     println!("Unable to process command => {}", command);
                     Err(())
@@ -224,18 +228,32 @@ impl Serializable for VarString {
         let mut buf: Vec<u8> = vec![0; n];
         stream.read(&mut buf).unwrap();
         let string = String::from_utf8(buf).unwrap();
-
-        Box::new(
-            Self {
-                length: length,
-                string: string,
-            }
-        )
+        Box::new(Self {length: length, string: string})
     }
 
     fn serialize(&self, stream: &mut dyn Write, opt: &Options) {
         self.length.serialize(stream, opt);
         stream.write(self.string.as_bytes()).unwrap();
+    }
+}
+
+#[derive(Debug)]
+pub struct InvVec {
+    pub object_type: u32,
+    pub hash: Vec<u8>,
+}
+
+impl Serializable for InvVec {
+    fn parse(stream: &mut dyn Read, _opt: &Options) -> Box<Self> {
+        let object_type = stream.read_u32::<LittleEndian>().unwrap();
+        let mut hash = vec![0; 32];
+        stream.read_exact(&mut hash).unwrap();
+        Box::new(Self {object_type: object_type, hash: hash})
+    }
+
+    fn serialize(&self, stream: &mut dyn Write, _opt: &Options) {
+        stream.write_u32::<LittleEndian>(self.object_type).unwrap();
+        stream.write_all(self.hash.as_slice()).unwrap();
     }
 }
 
@@ -551,6 +569,29 @@ impl Serializable for Getheaders {
         self.hash_count.serialize(stream, opt);
         stream.write_all(&self.block_locator_hashes).unwrap();
         stream.write_all(&self.hash_stop).unwrap();
+    }
+}
+
+#[derive(Debug)]
+pub struct Inv {
+    pub count: VarInt,
+    pub inv_vec: Vec<InvVec>,
+}
+
+impl Serializable for Inv {
+    fn parse(stream: &mut dyn Read, opt: &Options) -> Box<Self> {
+        let count = *VarInt::parse(stream, opt);
+        let mut inv_vec: Vec<InvVec> = Vec::new();
+        for _ in 0..count.as_usize() {
+            let item: InvVec = *InvVec::parse(stream, opt);
+            inv_vec.push(item);
+        }
+        Box::new(Self{count: count, inv_vec: inv_vec})
+    }
+
+    fn serialize(&self, stream: &mut dyn Write, opt: &Options) {
+        self.count.serialize(stream, opt);
+        self.inv_vec.iter().for_each(|item| item.serialize(stream, opt));
     }
 }
 

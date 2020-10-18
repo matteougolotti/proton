@@ -95,6 +95,10 @@ impl Node {
             BitcoinMessage::Getheaders(_getheaders) => {
                 println!("RECEIVED => getheaders");
             },
+            BitcoinMessage::Inv(inv) => {
+                println!("RECEIVED => inv");
+                inv.inv_vec.iter().for_each(|item| println!("{:?}", item));
+            },
             _ => {
                 println!("RECEIVED => unknown");
             },
